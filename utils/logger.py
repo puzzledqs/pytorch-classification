@@ -1,5 +1,9 @@
 # A simple torch style logger
 # (C) Wei YANG 2017
+
+# Modified by Shi Qiu
+#   8/29/2017
+
 from __future__ import absolute_import
 import matplotlib.pyplot as plt
 import os
@@ -11,70 +15,88 @@ __all__ = ['Logger', 'LoggerMonitor', 'savefig']
 def savefig(fname, dpi=None):
     dpi = 150 if dpi == None else dpi
     plt.savefig(fname, dpi=dpi)
-    
-def plot_overlap(logger, names=None):
-    names = logger.names if names == None else names
-    numbers = logger.numbers
-    for _, name in enumerate(names):
-        x = np.arange(len(numbers[name]))
-        plt.plot(x, np.asarray(numbers[name]))
-    return [logger.title + '(' + name + ')' for name in names]
 
 class Logger(object):
-    '''Save training process to log file with simple plot function.'''
-    def __init__(self, fpath, title=None, resume=False): 
-        self.file = None
-        self.resume = resume
+    '''Save training process to log file with simple plot function.
+        Metrics for 'train' and 'val' phases are stored separately
+    '''
+    def __init__(self, fpath, title=None, names=[], resume=True, print_to_screen=False):
+        self.log_dict = {'train': {}, 'val': {}}
+        self.print_to_screen = print_to_screen
         self.title = '' if title == None else title
-        if fpath is not None:
-            if resume: 
-                self.file = open(fpath, 'r') 
-                name = self.file.readline()
-                self.names = name.rstrip().split('\t')
-                self.numbers = {}
-                for _, name in enumerate(self.names):
-                    self.numbers[name] = []
+        self.file = None
 
-                for numbers in self.file:
-                    numbers = numbers.rstrip().split('\t')
-                    for i in range(0, len(numbers)):
-                        self.numbers[self.names[i]].append(numbers[i])
-                self.file.close()
-                self.file = open(fpath, 'a')  
+        if fpath is not None:
+            if resume and os.path.exists(fpath):
+                self.load_logs(fpath)
+                self.file = open(fpath, 'a')
             else:
                 self.file = open(fpath, 'w')
+                self.set_names(names)
+
+    # load previous logs
+    def load_logs(self, fpath):
+        self.file = open(fpath, 'r')
+        self.names = self.file.readline().strip().split()[1:]
+        for name in self.names:
+            self.log_dict['train'][name] = []
+            self.log_dict['val'][name] = []
+
+        for line in self.file:
+            strs = line.strip().split()
+            phase = strs[0][1:-1]
+            for idx, s in enumerate(strs[1:]):
+                self.log_dict[phase][self.names[idx]].append(float(s))
+
+        self.file.close()
+
 
     def set_names(self, names):
-        if self.resume: 
-            pass
         # initialize numbers as empty list
-        self.numbers = {}
         self.names = names
+        self.file.write('phase\t')
         for _, name in enumerate(self.names):
-            self.file.write(name)
-            self.file.write('\t')
-            self.numbers[name] = []
+            self.file.write(name + '\t')
+            self.log_dict['train'][name] = []
+            self.log_dict['val'][name] = []
         self.file.write('\n')
         self.file.flush()
 
 
-    def append(self, numbers):
+    def append(self, phase, numbers):
+        print len(self.names), len(numbers)
         assert len(self.names) == len(numbers), 'Numbers do not match names'
+        str_to_write = '[%s]\t'.ljust(7) %(phase)
+        self.file.write(str_to_write)
+        if self.print_to_screen:
+            print str_to_write,
         for index, num in enumerate(numbers):
-            self.file.write("{0:.6f}".format(num))
-            self.file.write('\t')
-            self.numbers[self.names[index]].append(num)
+            if index == 0:
+                str_to_write = "%7d\t" %(num)
+            else:
+                str_to_write = "%.6f\t" %(num)
+            self.file.write(str_to_write)
+            if self.print_to_screen:
+                print str_to_write,
+            self.log_dict[phase][self.names[index]].append(num)
+
         self.file.write('\n')
         self.file.flush()
+        if self.print_to_screen:
+            print '\n',
 
-    def plot(self, names=None):   
-        names = self.names if names == None else names
-        numbers = self.numbers
-        for _, name in enumerate(names):
-            x = np.arange(len(numbers[name]))
-            plt.plot(x, np.asarray(numbers[name]))
-        plt.legend([self.title + '(' + name + ')' for name in names])
+    def plot(self, names=None):
+        names = self.names[1:] if names == None else names
+        legend = []
+        for phase in self.log_dict.keys():
+            for name in names:
+                x = self.log_dict[phase][self.names[0]]
+                plt.plot(x, self.log_dict[phase][name])
+                legend.append(self.title + '-[' + phase + ']-' + name)
+        plt.legend(legend)
         plt.grid(True)
+        plt.show(block=False)
+        return legend
 
     def close(self):
         if self.file is not None:
@@ -82,46 +104,60 @@ class Logger(object):
 
 class LoggerMonitor(object):
     '''Load and visualize multiple logs.'''
-    def __init__ (self, paths):
-        '''paths is a distionary with {name:filepath} pair'''
+    def __init__ (self, logs):
+        '''logs is a distionary with {name:filepath} pair'''
         self.loggers = []
-        for title, path in paths.items():
+        for title, path in logs.items():
             logger = Logger(path, title=title, resume=True)
             self.loggers.append(logger)
 
-    def plot(self, names=None):
+    def plot(self, names=None, separate_windows=True):
         plt.figure()
-        plt.subplot(121)
-        legend_text = []
-        for logger in self.loggers:
-            legend_text += plot_overlap(logger, names)
-        plt.legend(legend_text, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-        plt.grid(True)
-                    
+        if not separate_windows:
+            legend_text = []
+            for logger in self.loggers:
+                legend_text += logger.plot(names)
+            plt.legend(legend_text)
+        else:
+            row = (len(self.loggers) + 1) / 2
+            for i, logger in enumerate(self.loggers):
+                print i
+                plt.subplot(row, 2, i + 1)
+                logger.plot(names)
+        plt.show()
+
+
 if __name__ == '__main__':
     # # Example
-    # logger = Logger('test.txt')
-    # logger.set_names(['Train loss', 'Valid loss','Test loss'])
+    # logger = Logger('test2.txt',
+    #                 title='Test',
+    #                 names=['iter', 'loss', 'accuracy'],
+    #                 resume=False,
+    #                 print_to_screen=True
+    #                 )
 
     # length = 100
     # t = np.arange(length)
-    # train_loss = np.exp(-t / 10.0) + np.random.rand(length) * 0.1
-    # valid_loss = np.exp(-t / 10.0) + np.random.rand(length) * 0.1
-    # test_loss = np.exp(-t / 10.0) + np.random.rand(length) * 0.1
+    # train_loss = np.exp(-t / 5.0) + np.random.randn(length) * 0.1
+    # train_acc = 1 - np.exp(-t / 5.0) + np.random.randn(length) * 0.1
+    # test_loss = np.exp(-t / 10.0) + np.random.randn(length) * 0.1
+    # test_acc = 1 - np.exp(-t / 10.0) + np.random.randn(length) * 0.1
 
     # for i in range(0, length):
-    #     logger.append([train_loss[i], valid_loss[i], test_loss[i]])
+    #     logger.append('train', [i, train_loss[i], train_acc[i]])
+    #     if i % 10 == 0:
+    #         logger.append('val', [i, test_loss[i], test_acc[i]])
+
     # logger.plot()
 
     # Example: logger monitor
-    paths = {
-    'resadvnet20':'/home/wyang/code/pytorch-classification/checkpoint/cifar10/resadvnet20/log.txt', 
-    'resadvnet32':'/home/wyang/code/pytorch-classification/checkpoint/cifar10/resadvnet32/log.txt',
-    'resadvnet44':'/home/wyang/code/pytorch-classification/checkpoint/cifar10/resadvnet44/log.txt',
+    logs = {
+    'logger1': 'test.txt',
+    'logger2': 'test2.txt',
     }
 
-    field = ['Valid Acc.']
+    fields = ['loss', 'accuracy']
 
-    monitor = LoggerMonitor(paths)
-    monitor.plot(names=field)
-    savefig('test.eps')
+    monitor = LoggerMonitor(logs)
+    monitor.plot(names=fields, separate_windows=False)
+    savefig('log.png')
