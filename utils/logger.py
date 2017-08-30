@@ -20,8 +20,9 @@ class Logger(object):
     '''Save training process to log file with simple plot function.
         Metrics for 'train' and 'val' phases are stored separately
     '''
-    def __init__(self, fpath, title=None, names=[], resume=True, print_to_screen=False):
+    def __init__(self, fpath, title=None, names=[], resume=True, log_interval=20, print_to_screen=False):
         self.log_dict = {'train': {}, 'val': {}}
+        self.log_interval = log_interval
         self.print_to_screen = print_to_screen
         self.title = '' if title == None else title
         self.file = None
@@ -64,7 +65,6 @@ class Logger(object):
 
 
     def append(self, phase, numbers):
-        print len(self.names), len(numbers)
         assert len(self.names) == len(numbers), 'Numbers do not match names'
         str_to_write = '[%s]\t'.ljust(7) %(phase)
         self.file.write(str_to_write)
@@ -74,7 +74,7 @@ class Logger(object):
             if index == 0:
                 str_to_write = "%7d\t" %(num)
             else:
-                str_to_write = "%.6f\t" %(num)
+                str_to_write = "%.3f\t" %(num)
             self.file.write(str_to_write)
             if self.print_to_screen:
                 print str_to_write,
@@ -152,12 +152,11 @@ if __name__ == '__main__':
 
     # Example: logger monitor
     logs = {
-    'logger1': 'test.txt',
-    'logger2': 'test2.txt',
+    'logger1': 'alexnet/log.txt',
     }
 
-    fields = ['loss', 'accuracy']
+    fields = ['loss', 'acc_top1', 'acc_top5']
 
     monitor = LoggerMonitor(logs)
-    monitor.plot(names=fields, separate_windows=False)
+    monitor.plot(names=fields, separate_windows=True)
     savefig('log.png')
