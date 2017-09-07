@@ -9,6 +9,7 @@ import sys
 import time
 import math
 
+import torch
 import torch.nn as nn
 import torch.nn.init as init
 from torch.autograd import Variable
@@ -18,17 +19,22 @@ __all__ = ['get_mean_and_std', 'init_params', 'mkdir_p', 'AverageMeter']
 
 def get_mean_and_std(dataset):
     '''Compute the mean and std value of dataset.'''
-    dataloader = trainloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=2)
+    dataloader = trainloader = torch.utils.data.DataLoader(dataset, batch_size=100, shuffle=True, num_workers=2)
 
-    mean = torch.zeros(3)
-    std = torch.zeros(3)
+    dataiter = iter(dataloader)
+    batch, _ = dataiter.next()
+    n_channel = batch[0].shape[0]
+
+    assert n_channel == 1 or n_channel == 3, "channel number must be 1 or 3!"
+    mean = torch.zeros(n_channel)
+    std = torch.zeros(n_channel)
     print('==> Computing mean and std..')
     for inputs, targets in dataloader:
-        for i in range(3):
+        for i in range(n_channel):
             mean[i] += inputs[:,i,:,:].mean()
             std[i] += inputs[:,i,:,:].std()
-    mean.div_(len(dataset))
-    std.div_(len(dataset))
+    mean.div_(len(dataloader))
+    std.div_(len(dataloader))
     return mean, std
 
 def init_params(net):

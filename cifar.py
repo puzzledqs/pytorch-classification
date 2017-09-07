@@ -121,18 +121,18 @@ def main():
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
     if args.dataset == 'cifar10':
-        dataloader = datasets.CIFAR10
+        dataset = datasets.CIFAR10
         num_classes = 10
     else:
-        dataloader = datasets.CIFAR100
+        dataset = datasets.CIFAR100
         num_classes = 100
 
 
-    trainset = dataloader(root='./data', train=True, download=True, transform=transform_train)
-    trainloader = data.DataLoader(trainset, batch_size=args.train_batch, shuffle=True, num_workers=args.workers)
+    trainset = dataset(root='./data', train=True, download=True, transform=transform_train)
+    trainloader = data.DataLoader(trainset, batch_size=args.train_batch, shuffle=True, num_workers=args.workers, pin_memory=True)
 
-    testset = dataloader(root='./data', train=False, download=False, transform=transform_test)
-    testloader = data.DataLoader(testset, batch_size=args.test_batch, shuffle=False, num_workers=args.workers)
+    testset = dataset(root='./data', train=False, download=False, transform=transform_test)
+    testloader = data.DataLoader(testset, batch_size=args.test_batch, shuffle=False, num_workers=args.workers, pin_memory=True)
 
     # Model
     print("==> creating model '{}'".format(args.arch))
@@ -185,7 +185,7 @@ def main():
         best_acc = checkpoint['best_acc']
         start_epoch = checkpoint['epoch']
         iteration = checkpoint['iter']
-        model.load_state_dict(checkpoint['state_dict'])
+        model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title,
                         names=['iter', 'lr', 'loss', 'acc_top1', 'acc_top5'],
@@ -220,7 +220,7 @@ def main():
         save_checkpoint({
                 'epoch': epoch + 1,
                 'iter': iteration,
-                'state_dict': model.state_dict(),
+                'model': model.state_dict(),
                 'acc': test_acc,
                 'best_acc': best_acc,
                 'optimizer' : optimizer.state_dict(),
@@ -250,7 +250,7 @@ def train(trainloader, model, criterion, optimizer, use_cuda, logger):
         data_time.update(time.time() - timestamp)
 
         if use_cuda:
-            inputs, targets = inputs.cuda(), targets.cuda()
+            inputs, targets = inputs.cuda(async=True), targets.cuda(async=True)
         inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
 
         # compute output
