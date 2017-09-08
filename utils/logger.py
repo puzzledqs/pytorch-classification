@@ -38,12 +38,20 @@ class Logger(object):
     # load previous logs
     def load_logs(self, fpath):
         self.file = open(fpath, 'r')
-        self.names = self.file.readline().strip().split()[1:]
+
+        # skip leading raw strings
+        line = self.file.readline()
+        while line.startswith('## '):
+            line = self.file.readline()
+
+        self.names = line.strip().split()[1:]
         for name in self.names:
             self.log_dict['train'][name] = []
             self.log_dict['val'][name] = []
 
         for line in self.file:
+            if line.startswith('## '):
+                continue
             strs = line.strip().split()
             phase = strs[0][1:-1]
             for idx, s in enumerate(strs[1:]):
@@ -84,6 +92,14 @@ class Logger(object):
         self.file.flush()
         if self.print_to_screen:
             print '\n',
+
+    def append_raw(self, s):
+        for line in s.split('\n'):
+            output_s = '## {} \n'.format(line)
+            self.file.write(output_s)
+            self.file.flush()
+            if self.print_to_screen:
+                print output_s,
 
     def plot(self, names=None):
         names = self.names[1:] if names == None else names
@@ -152,11 +168,13 @@ if __name__ == '__main__':
 
     # Example: logger monitor
     logs = {
-    'logger1': 'alexnet/log.txt',
+    #'NetA': 'checkpoint/fashion_NetA/log.txt',
+    'NetB': 'checkpoint/fashion_NetB_nopadding/log.txt',
+    'NetC': 'checkpoint/fashion_NetC/log.txt',
+    'NetD': 'checkpoint/fashion_NetD/log.txt'
     }
 
-    fields = ['loss', 'acc_top1', 'acc_top5']
+    fields = ['acc_top1', 'acc_top5']
 
     monitor = LoggerMonitor(logs)
     monitor.plot(names=fields, separate_windows=True)
-    savefig('log.png')

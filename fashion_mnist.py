@@ -20,14 +20,14 @@ from utils import Bar, Logger, AverageMeter, accuracy, mkdir_p, savefig
 
 
 model_names = sorted(name for name in models.__dict__
-    if name.islower() and not name.startswith("__")
-    and callable(models.__dict__[name]))
+    if not name.startswith("__") and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch Fashion-mnist Training')
 # Datasets
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 # Optimization options
+parser.add_argument('--arch', metavar='ARCH', choices=model_names)
 parser.add_argument('--epochs', default=300, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
@@ -142,7 +142,7 @@ def main():
     #             )
     # else:
     #     model = models.__dict__[args.arch](num_classes=num_classes)
-    model = models.NetB(n_class=10)
+    model = getattr(models, args.arch)(n_class=num_classes)
 
     model = nn.DataParallel(model).cuda()
     cudnn.benchmark = True
@@ -165,17 +165,19 @@ def main():
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
 
-    logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title,
-                    names=['iter', 'lr', 'loss', 'acc_top1', 'acc_top5'],
-                    resume=(len(args.resume) > 0),
-                    log_interval=50,
-                    print_to_screen=True)
-
     if args.evaluate:
         print('\nEvaluation only')
         test_loss, test_acc = test(testloader, model, criterion, use_cuda)
         print(' Test Loss:  %.8f, Test Acc:  %.2f' % (test_loss, test_acc))
         return
+    else:
+        logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title,
+                names=['iter', 'lr', 'loss', 'acc_top1', 'acc_top5'],
+                resume=(len(args.resume) > 0),
+                log_interval=50,
+                print_to_screen=True)
+        if not args.resume:
+            logger.append_raw(str(model))
 
     # Train and val
     #   initial testing
@@ -202,10 +204,9 @@ def main():
                 checkpoint=args.checkpoint,
                 filename="checkpoint_epoch_{:d}".format(epoch + 1))
 
+    logger.append_raw('Best acc: {}'.format(best_acc))
     logger.close()
 
-    print('Best acc:')
-    print(best_acc)
 
 def train(trainloader, model, criterion, optimizer, use_cuda, logger):
     # switch to train mode
@@ -323,6 +324,6 @@ def adjust_learning_rate(optimizer, epoch):
         for param_group in optimizer.param_groups:
             param_group['lr'] = state['lr']
 
-## python fashion_mnist.py --epoches=50 --train-batch=100 --learning-rate=0.01 --schedule=20 40 --checkpoint=checkpoint/fashion_NetA
+## python fashion_mnist.py --arch=NetA --epoches=50 --train-batch=100 --learning-rate=0.01 --schedule=20 40 --checkpoint=checkpoint/fashion_NetA
 if __name__ == '__main__':
     main()

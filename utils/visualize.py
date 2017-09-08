@@ -4,13 +4,13 @@ import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
 import numpy as np
-from .misc import *   
+from .misc import *
 
 __all__ = ['make_image', 'show_batch', 'show_mask', 'show_mask_single']
 
 # functions to show an image
 def make_image(img, mean=(0,0,0), std=(1,1,1)):
-    for i in range(0, 3):
+    for i in range(len(mean)):
         img[i] = img[i] * std[i] + mean[i]    # unnormalize
     npimg = img.numpy()
     return np.transpose(npimg, (1, 2, 0))
